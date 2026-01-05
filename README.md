@@ -1,6 +1,6 @@
 # secretsdump-ng
 
-Next-generation credential dumping tool that uses DSInternals for extracting credentials from Windows systems.
+Credential dumping tool that uses DSInternals for extracting credentials from Windows systems, using any available command-execution port.
 
 ## Features
 
@@ -54,31 +54,13 @@ secretsdump-ng 192.168.1.10 DOMAIN/username password -v
 5. **Processes and formats** credentials using impacket-secretsdump
 6. **Saves output** to `./secretsdump_ng_out/[IP]/secretsdump.out`
 
-## Output Format
-
-The tool produces output compatible with standard secretsdump:
-
-```
-[*] Dumping NTDS.DIT secrets
-(admin) Administrator:500:aad3b435b51404eeaad3b435b51404ee:c66d72021a2d4744409969a581a1705e:::
-user1:1001:aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c:::
-MACHINE$:1002:aad3b435b51404eeaad3b435b51404ee:993e1b083f885e5ef7669286189b7790:::
-
-[*] ClearText passwords grabbed
-user2:CLEARTEXT:Password123!
-
-[*] Kerberos keys grabbed
-Administrator:aes256-cts-hmac-sha1-96:bdb1a615bc9d82d2ab21f09f11baaef4bc66c48efdd56424e1206e581e4dd827:...
-```
 
 Admin accounts are highlighted with `(admin)` tag. Machine accounts are sorted to the bottom.
 
 ## Security Notes
 
 - Uses temporary SSL certificates for HTTPS transfers
-- All credential files are transmitted over encrypted connections
 - Temporary files on target systems are stored in `$env:TEMP` and cleaned up after extraction
-- Requires appropriate permissions to dump credentials (typically Domain Admin or local Administrator)
 
 ## License
 
