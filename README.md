@@ -2,6 +2,8 @@
 
 Credential dumping tool that uses DSInternals for extracting credentials from Windows systems, using any available command-execution port.
 
+Massive thanks to DSInternals, this tool really isn't anything revolutionary and uses the impressive work already completed by Michael Grafnetter
+
 ## Features
 
 - **NTDS.DIT extraction** using DSInternals on Domain Controllers
@@ -10,15 +12,6 @@ Credential dumping tool that uses DSInternals for extracting credentials from Wi
 - **Secure transfer of credentials** via HTTPS
 - **Formatted output** compatible with standard secretsdump format
 - **Filtered extraction** - dump only specific users with `--just-dc-user`
-
-### Additional Requirements
-
-You'll also need `exec_across_windows.py` in your working directory or PATH.
-
-System requirements:
-- `openssl` (for generating SSL certificates)
-- `wget` (for downloading DSInternals)
-- Valid domain credentials with appropriate privileges
 
 ## Usage
 
