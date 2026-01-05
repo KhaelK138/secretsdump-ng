@@ -11,12 +11,6 @@ Credential dumping tool that uses DSInternals for extracting credentials from Wi
 - **Formatted output** compatible with standard secretsdump format
 - **Filtered extraction** - dump only specific users with `--just-dc-user`
 
-## Installation
-
-```bash
-pip install secretsdump-ng
-```
-
 ### Additional Requirements
 
 You'll also need `exec_across_windows.py` in your working directory or PATH.
