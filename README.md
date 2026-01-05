@@ -1,6 +1,6 @@
 # secretsdump-ng
 
-Credential dumping tool that uses DSInternals for extracting credentials from Windows systems, using any available command-execution port.
+Credential dumping tool that uses DSInternals for extracting credentials from Windows systems, using any available command-execution port (rather than relying on 445).
 
 Massive props to DSInternals & Impacket; this tool really isn't anything revolutionary and uses the impressive work already completed by Michael Grafnetter and the Fortra team.
 
