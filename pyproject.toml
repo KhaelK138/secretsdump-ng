@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "secretsdump-ng"
+version = "1.0.0"
+description = "Next-generation secretsdump tool using DSInternals for credential extraction"
+readme = "README.md"
+authors = [
+    {name = "Khael"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security"
+]
+keywords = ["security", "pentest", "active-directory", "credentials", "secretsdump", "secretsdump-ng"]
+requires-python = ">=3.8"
+dependencies = [
+    "impacket>=0.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build",
+    "twine",
+]
+
+[project.scripts]
+secretsdump-ng = "secretsdump_ng.secretsdump_ng:main_cli"
+
+[project.urls]
+Homepage = "https://github.com/KhaelK138/secretsdump-ng"
+Repository = "https://github.com/KhaelK138/secretsdump-ng"
+Issues = "https://github.com/KhaelK138/secretsdump-ng/issues"
+
+[tool.setuptools]
+packages = ["secretsdump_ng"]
