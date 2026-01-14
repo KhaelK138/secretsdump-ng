@@ -6,12 +6,11 @@ Massive props to DSInternals & Impacket; this tool really isn't anything revolut
 
 ## Features
 
-- **NTDS.DIT extraction** using DSInternals on Domain Controllers
-- **Registry hive dumping** (SAM, SYSTEM, SECURITY) on all Windows systems
-- **Multi-threaded** operations for dumping from multiple hosts
-- **Secure transfer of credentials** via HTTPS
-- **Formatted output** compatible with standard secretsdump format
-- **Filtered extraction** - dump only specific users with `--just-dc-user`
+- NTDS.DIT extraction using DSInternals on Domain Controllers
+- Registry hive dumping (SAM, SYSTEM, SECURITY) on Windows Servers
+- Multi-threaded operations for dumping from multiple hosts
+- Secure transfer of credentials via HTTPS
+- Filtered extraction - dump only specific users with `--just-dc-user`
 
 ## Usage
 

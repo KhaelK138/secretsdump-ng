@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "secretsdump-ng"
-version = "1.1.0"
+version = "1.1.1"
 description = "Next-generation secretsdump tool using DSInternals for credential extraction"
 readme = "README.md"
 authors = [

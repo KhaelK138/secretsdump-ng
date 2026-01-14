@@ -20,7 +20,7 @@ if not shutil.which("exec-across-windows"):
 
 DSINTERNALS_URL = "https://github.com/MichaelGrafnetter/DSInternals/releases/download/v6.2/DSInternals_v6.2.zip"
 DSINTERNALS_ZIP = "DSInternals_v6.2.zip"
-UPLOAD_DIR = "./secretsdump_ng_out/"
+UPLOAD_DIR = os.path.expanduser("~") + "/.secretsdump_ng_out/"
 DSINTERNALS_SERVE_DIR = os.path.join(UPLOAD_DIR, "dsinternals_files")
 CERT_FILE = os.path.join(UPLOAD_DIR, "cert.pem")
 KEY_FILE = os.path.join(UPLOAD_DIR, "key.pem")
