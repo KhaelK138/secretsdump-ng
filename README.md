@@ -34,7 +34,7 @@ secretsdump-ng 192.168.1.10 username password -v
 ## How It Works
 
 1. **Sets up HTTPS server** on port 1338 to receive credential dumps
-2. **Executes PowerShell remotely** on target systems using `exec_across_windows.py`
+2. **Executes PowerShell remotely** on target systems using `AuthFinder`
 3. **Extracts registry hives** (SAM, SYSTEM, SECURITY) from all Windows systems
 4. **Extracts NTDS.DIT** using DSInternals on Domain Controllers
 5. **Processes and formats** credentials using impacket-secretsdump
