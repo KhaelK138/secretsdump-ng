@@ -1,3 +1,3 @@
-"""secretsdump_ng: Execute commands across Windows systems using multiple RCE methods"""
+"""secretsdump-ng: Dump secrets from Windows Servers and Domain Controllers without 445 open."""
 
 __version__ = "1.1.2"
